@@ -1,0 +1,125 @@
+---
+title: Practical Machine Learning Prediction Final Assignment
+author: "Ken Dye"
+output:
+  html_document:
+    fig_height: 9
+    fig_width: 9
+---
+
+## Introduction  
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it.  In this project, we will use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. The participants were asked to perform barbell lifts correctly and incorrectly in 5 different ways. The goal is to predict the manner in which they did the exercise.  
+
+## Data Processing 
+```{r, cache = T}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(randomForest)
+library(corrplot)
+```
+### Import Data
+```{r, cache = T}
+trainUrl <-"https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv"
+testUrl <- "https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv"
+trainFile <- "./data/pml-training.csv"
+testFile  <- "./data/pml-testing.csv"
+if (!file.exists("./data")) {
+  dir.create("./data")
+}
+if (!file.exists(trainFile)) {
+  download.file(trainUrl, destfile=trainFile)
+}
+if (!file.exists(testFile)) {
+  download.file(testUrl, destfile=testFile)
+}
+```  
+### Reading in the two .csv files in order to create two data frames.
+
+The training .csv has 16922 observations, 160 variables.
+```{r, cache = T}
+trainRaw <- read.csv("./data/pml-training.csv")
+dim(trainRaw)
+```
+The testing .csv has 20 observations, 160 variables.
+```{r, cache = T}
+testRaw <- read.csv("./data/pml-testing.csv")
+dim(testRaw)
+```
+Note that the  "classe" variable in the training set is the outcome we wish to to predict. 
+
+### Data Cleaning
+Incomplete observations and data with missing values and values/variables that have no relevance to the analysis will be removed.
+```{r, cache = T}
+sum(complete.cases(trainRaw))
+```
+Remove col. with NA values.
+```{r, cache = T}
+trainRaw <- trainRaw[, colSums(is.na(trainRaw)) == 0] 
+testRaw <- testRaw[, colSums(is.na(testRaw)) == 0] 
+```  
+Remove col, that are not relevant to the analysis.
+```{r, cache = T}
+classe <- trainRaw$classe
+trainRemove <- grepl("^X|timestamp|window", names(trainRaw))
+trainRaw <- trainRaw[, !trainRemove]
+trainCleaned <- trainRaw[, sapply(trainRaw, is.numeric)]
+trainCleaned$classe <- classe
+testRemove <- grepl("^X|timestamp|window", names(testRaw))
+testRaw <- testRaw[, !testRemove]
+testCleaned <- testRaw[, sapply(testRaw, is.numeric)]
+```
+The cleaned training data now contains 19622 observations, 53 variables.
+The testing data set now contains 20 observations, 53 variables. The "classe" variable was not lost during cleaning.
+
+### Data Slicing
+The cleaned training set is split into a training data set (70%) and a validation data set (30%).
+
+## Reproducible Data
+
+```{r, cache = T}
+set.seed(88123)
+inTrain <- createDataPartition(trainCleaned$classe, p=0.70, list=F)
+trainData <- trainCleaned[inTrain, ]
+testData <- trainCleaned[-inTrain, ]
+```
+
+## Create  Model
+Using **Random Forest** algorithm to fit the activity recognition predictive model. The  **5-fold cross validation** will be used for validation.  
+```{r, cache = T}
+controlRf <- trainControl(method="cv", 5)
+modelRf <- train(classe ~ ., data=trainData, method="rf", trControl=controlRf, ntree=250)
+modelRf
+```
+Estimating the performance of the validation data set models yeilds:  
+```{r, cache = T}
+predictRf <- predict(modelRf, testData)
+confusionMatrix(testData$classe, predictRf)
+```
+```{r, cache = T}
+accuracy <- postResample(predictRf, testData$classe)
+accuracy
+oose <- 1 - as.numeric(confusionMatrix(testData$classe, predictRf)$overall[1])
+oose
+```
+99.42% with an out-of-sample error of 0.58%.
+
+## Test Data Set Prediction
+
+Applying the model to the test data set.
+```{r, cache = T}
+result <- predict(modelRf, testCleaned[, -length(names(testCleaned))])
+result
+```  
+
+## Figures
+Correlation Matrix 
+```{r, cache = T}
+corrPlot <- cor(trainData[, -length(names(trainData))])
+corrplot(corrPlot, method="shade")
+```
+Decision Tree
+```{r, cache = T}
+treeModel <- rpart(classe ~ ., data=trainData, method="class")
+prp(treeModel, nn=TRUE,shadow.col="gray",branch.lty=3, branch=.5,faclen=0, trace=1,split.cex=1.2,split.prefix="is ", split.suffix="?") 
+```
