@@ -2,9 +2,9 @@
 title: Practical Machine Learning Prediction Final Assignment
 author: "Ken Dye"
 output:
-  html_document:
-    fig_height: 9
-    fig_width: 9
+  pdf_document:
+    fig_height: 7
+    fig_width: 7
 ---
 
 ## Introduction  
